@@ -1,0 +1,39 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.bigsinger.tvtetris'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.bigsinger.tvtetris'
+        minSdk 17
+        //noinspection OldTargetApi -- API 35 is the stable target supported by AGP 8.9.
+        targetSdk 35
+        versionCode 100
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+    }
+
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach {
+            outputFileName = "TVTetris-${variant.buildType.name}-${variant.versionName}.apk"
+        }
+    }
+}
