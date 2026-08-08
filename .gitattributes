@@ -7,5 +7,7 @@
 *.java text eol=lf
 *.xml text eol=lf
 *.apk binary
+*.mp3 binary
+*.png binary
 gradlew text eol=lf
 gradlew.bat text eol=crlf

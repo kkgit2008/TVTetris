@@ -46,6 +46,7 @@ final class TetrisView extends View {
 
     private final GameEngine engine = new GameEngine();
     private final GameStorage storage;
+    private final GameSoundManager soundEffects;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final RectF leftPanel = new RectF();
@@ -112,6 +113,7 @@ final class TetrisView extends View {
     TetrisView(Context context, GameStorage storage) {
         super(context);
         this.storage = storage;
+        soundEffects = new GameSoundManager(context.getApplicationContext());
         setFocusable(true);
         setFocusableInTouchMode(true);
         setKeepScreenOn(true);
@@ -210,7 +212,6 @@ final class TetrisView extends View {
         GameEngine.StepResult result;
         if (hardDrop) {
             lastDownTapAt = 0L;
-            playTone(ToneGenerator.TONE_PROP_BEEP, 55);
             result = engine.hardDrop();
         } else {
             if (repeatCount == 0) {
@@ -240,6 +241,7 @@ final class TetrisView extends View {
         frameLoopActive = false;
         handler.removeCallbacks(frameRunnable);
         saveActiveGame();
+        soundEffects.release();
         if (toneGenerator != null) {
             toneGenerator.release();
             toneGenerator = null;
@@ -294,14 +296,13 @@ final class TetrisView extends View {
         }
         if (result.locked) {
             lastDownTapAt = 0L;
+            soundEffects.playPieceLand();
         }
         if (result.clearedRows.length > 0) {
             flashingRows = result.clearedRows;
             clearFlashUntil = SystemClock.uptimeMillis() + 360L;
             createClearParticles(result.clearedRows);
-            playTone(result.clearedRows.length == 4
-                    ? ToneGenerator.TONE_PROP_ACK
-                    : ToneGenerator.TONE_PROP_BEEP2, 130);
+            soundEffects.playLineClear(result.clearedRows.length);
             storage.updateLeaderboard(engine);
             leaderboard = storage.getLeaderboard();
         }

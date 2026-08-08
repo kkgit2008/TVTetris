@@ -10,6 +10,7 @@ public final class GameEngineSelfTest {
         testSnapshotRestoreIsPaused();
         testSingleLineClearAndScoring();
         testHardDrop();
+        testSpeedCapsAtLevelFive();
         testLiveLeaderboardUpsert();
         testLockAboveBoardEndsGame();
         System.out.println("GameEngineSelfTest: all checks passed");
@@ -100,6 +101,23 @@ public final class GameEngineSelfTest {
             }
         }
         assertEquals(1, matchingGameRows, "one game must occupy exactly one leaderboard row");
+    }
+
+    private static void testSpeedCapsAtLevelFive() {
+        int[][] board = new int[GameEngine.ROWS][GameEngine.COLUMNS];
+        GameEngine levelFive = new GameEngine();
+        GameEngine levelTwenty = new GameEngine();
+        int[] queue = {GameEngine.O, GameEngine.T};
+        assertTrue(levelFive.restore(board, GameEngine.I, 0, 3, 0, 0, 40, queue),
+                "level-five speed setup should restore");
+        assertTrue(levelTwenty.restore(board, GameEngine.I, 0, 3, 0, 0, 190, queue),
+                "high-level speed setup should restore");
+
+        assertEquals(5, levelFive.getLevel(), "40 lines should be level five");
+        assertEquals(20, levelTwenty.getLevel(), "190 lines should be level twenty");
+        assertEquals(590L, levelFive.getDropIntervalMs(), "level five should fall every 590ms");
+        assertEquals(levelFive.getDropIntervalMs(), levelTwenty.getDropIntervalMs(),
+                "levels above five must not increase falling speed");
     }
 
     private static void testSingleLineClearAndScoring() {

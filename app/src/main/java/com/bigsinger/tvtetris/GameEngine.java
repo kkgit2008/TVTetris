@@ -11,6 +11,7 @@ final class GameEngine {
     static final int COLUMNS = 10;
     static final int ROWS = 20;
     static final int PIECE_COUNT = 7;
+    static final int MAX_SPEED_LEVEL = 5;
 
     static final int I = 0;
     static final int O = 1;
@@ -420,7 +421,8 @@ final class GameEngine {
     }
 
     long getDropIntervalMs() {
-        return Math.max(90L, 850L - (getLevel() - 1L) * 65L);
+        int speedLevel = Math.min(getLevel(), MAX_SPEED_LEVEL);
+        return 850L - (speedLevel - 1L) * 65L;
     }
 
     boolean hasStarted() {
