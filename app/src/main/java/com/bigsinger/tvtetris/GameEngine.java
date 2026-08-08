@@ -75,6 +75,8 @@ final class GameEngine {
     private int pieceY;
     private int score;
     private int lines;
+    private long gameId;
+    private long startedAt;
     private boolean started;
     private boolean running;
     private boolean gameOver;
@@ -88,6 +90,8 @@ final class GameEngine {
         nextQueue.clear();
         score = 0;
         lines = 0;
+        startedAt = System.currentTimeMillis();
+        gameId = createGameId();
         started = true;
         running = true;
         gameOver = false;
@@ -97,6 +101,13 @@ final class GameEngine {
 
     boolean restore(int[][] savedBoard, int type, int savedRotation, int x, int y,
                     int savedScore, int savedLines, int[] savedQueue) {
+        return restore(savedBoard, type, savedRotation, x, y, savedScore, savedLines,
+                savedQueue, 0L, 0L);
+    }
+
+    boolean restore(int[][] savedBoard, int type, int savedRotation, int x, int y,
+                    int savedScore, int savedLines, int[] savedQueue,
+                    long savedGameId, long savedStartedAt) {
         if (savedBoard == null || savedBoard.length != ROWS || type < 0 || type >= PIECE_COUNT) {
             return false;
         }
@@ -119,6 +130,8 @@ final class GameEngine {
         pieceY = y;
         score = Math.max(0, savedScore);
         lines = Math.max(0, savedLines);
+        startedAt = savedStartedAt > 0L ? savedStartedAt : System.currentTimeMillis();
+        gameId = savedGameId > 0L ? savedGameId : createGameId();
         nextQueue.clear();
         if (savedQueue != null) {
             for (int piece : savedQueue) {
@@ -178,6 +191,27 @@ final class GameEngine {
             return StepResult.MOVED;
         }
         return lockCurrentPiece();
+    }
+
+    StepResult hardDrop() {
+        if (!running || gameOver) {
+            return StepResult.NONE;
+        }
+        int distance = 0;
+        while (canPlace(currentType, rotation, pieceX, pieceY + 1)) {
+            pieceY++;
+            distance++;
+        }
+        score += distance * 2;
+        return lockCurrentPiece();
+    }
+
+    private long createGameId() {
+        long candidate = random.nextLong() & Long.MAX_VALUE;
+        if (candidate == 0L) {
+            candidate = Math.max(1L, System.currentTimeMillis());
+        }
+        return candidate;
     }
 
     private StepResult lockCurrentPiece() {
@@ -371,6 +405,14 @@ final class GameEngine {
 
     int getLines() {
         return lines;
+    }
+
+    long getGameId() {
+        return gameId;
+    }
+
+    long getStartedAt() {
+        return startedAt;
     }
 
     int getLevel() {

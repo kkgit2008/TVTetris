@@ -7,19 +7,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 final class GameStorage {
     private static final String PREFERENCES = "tv_tetris_state";
     private static final String KEY_ACTIVE_GAME = "active_game_v1";
     private static final String KEY_LEADERBOARD = "leaderboard_v1";
-    private static final int MAX_SCORES = 20;
 
     private final SharedPreferences preferences;
 
@@ -33,7 +27,7 @@ final class GameStorage {
         }
         try {
             JSONObject json = new JSONObject();
-            json.put("version", 1);
+            json.put("version", 2);
             StringBuilder board = new StringBuilder(GameEngine.ROWS * GameEngine.COLUMNS);
             for (int row = 0; row < GameEngine.ROWS; row++) {
                 for (int column = 0; column < GameEngine.COLUMNS; column++) {
@@ -47,6 +41,8 @@ final class GameStorage {
             json.put("y", engine.getPieceY());
             json.put("score", engine.getScore());
             json.put("lines", engine.getLines());
+            json.put("gameId", engine.getGameId());
+            json.put("startedAt", engine.getStartedAt());
 
             JSONArray queue = new JSONArray();
             for (int piece : engine.getSavedQueue()) {
@@ -66,7 +62,8 @@ final class GameStorage {
         }
         try {
             JSONObject json = new JSONObject(raw);
-            if (json.optInt("version", 0) != 1) {
+            int version = json.optInt("version", 0);
+            if (version < 1 || version > 2) {
                 clearActiveGame();
                 return false;
             }
@@ -97,7 +94,9 @@ final class GameStorage {
                     json.getInt("y"),
                     json.optInt("score", 0),
                     json.optInt("lines", 0),
-                    queue);
+                    queue,
+                    json.optLong("gameId", 0L),
+                    json.optLong("startedAt", 0L));
             if (!restored) {
                 clearActiveGame();
             }
@@ -112,26 +111,24 @@ final class GameStorage {
         preferences.edit().remove(KEY_ACTIVE_GAME).apply();
     }
 
-    void recordGameOverScore(int score) {
-        List<ScoreEntry> entries = readLeaderboard();
-        entries.add(new ScoreEntry(Math.max(0, score), System.currentTimeMillis()));
-        Collections.sort(entries, new Comparator<ScoreEntry>() {
-            @Override
-            public int compare(ScoreEntry left, ScoreEntry right) {
-                if (left.score != right.score) {
-                    return left.score < right.score ? 1 : -1;
-                }
-                return left.timestamp < right.timestamp ? 1 : (left.timestamp == right.timestamp ? 0 : -1);
-            }
-        });
-        if (entries.size() > MAX_SCORES) {
-            entries = new ArrayList<ScoreEntry>(entries.subList(0, MAX_SCORES));
+    void updateLeaderboard(GameEngine engine) {
+        if (engine == null || !engine.hasStarted()) {
+            return;
         }
+        List<Leaderboard.Entry> entries = Leaderboard.upsert(
+                readLeaderboard(),
+                engine.getGameId(),
+                engine.getScore(),
+                engine.getStartedAt());
+        writeLeaderboard(entries);
+    }
 
+    private void writeLeaderboard(List<Leaderboard.Entry> entries) {
         JSONArray array = new JSONArray();
-        for (ScoreEntry entry : entries) {
+        for (Leaderboard.Entry entry : entries) {
             JSONObject item = new JSONObject();
             try {
+                item.put("gameId", entry.gameId);
                 item.put("score", entry.score);
                 item.put("time", entry.timestamp);
                 array.put(item);
@@ -142,19 +139,21 @@ final class GameStorage {
         preferences.edit().putString(KEY_LEADERBOARD, array.toString()).apply();
     }
 
-    List<ScoreEntry> getLeaderboard() {
-        return new ArrayList<ScoreEntry>(readLeaderboard());
+    List<Leaderboard.Entry> getLeaderboard() {
+        return new ArrayList<Leaderboard.Entry>(readLeaderboard());
     }
 
-    private List<ScoreEntry> readLeaderboard() {
-        List<ScoreEntry> entries = new ArrayList<ScoreEntry>();
+    private List<Leaderboard.Entry> readLeaderboard() {
+        List<Leaderboard.Entry> entries = new ArrayList<Leaderboard.Entry>();
         String raw = preferences.getString(KEY_LEADERBOARD, "[]");
         try {
             JSONArray array = new JSONArray(raw);
-            for (int index = 0; index < array.length() && entries.size() < MAX_SCORES; index++) {
+            for (int index = 0; index < array.length()
+                    && entries.size() < Leaderboard.MAX_ENTRIES; index++) {
                 JSONObject item = array.optJSONObject(index);
                 if (item != null) {
-                    entries.add(new ScoreEntry(
+                    entries.add(new Leaderboard.Entry(
+                            Math.max(0L, item.optLong("gameId", 0L)),
                             Math.max(0, item.optInt("score", 0)),
                             Math.max(0L, item.optLong("time", 0L))));
                 }
@@ -163,19 +162,5 @@ final class GameStorage {
             preferences.edit().remove(KEY_LEADERBOARD).apply();
         }
         return entries;
-    }
-
-    static final class ScoreEntry {
-        final int score;
-        final long timestamp;
-
-        ScoreEntry(int score, long timestamp) {
-            this.score = score;
-            this.timestamp = timestamp;
-        }
-
-        String formattedDate() {
-            return new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(new Date(timestamp));
-        }
     }
 }

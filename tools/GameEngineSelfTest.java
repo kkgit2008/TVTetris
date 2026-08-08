@@ -1,11 +1,16 @@
 package com.bigsinger.tvtetris;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /** Dependency-free smoke tests for the pure Java rules engine. */
 public final class GameEngineSelfTest {
     public static void main(String[] args) {
         testSevenBagAndMovement();
         testSnapshotRestoreIsPaused();
         testSingleLineClearAndScoring();
+        testHardDrop();
+        testLiveLeaderboardUpsert();
         testLockAboveBoardEndsGame();
         System.out.println("GameEngineSelfTest: all checks passed");
     }
@@ -50,13 +55,51 @@ public final class GameEngineSelfTest {
                 original.getPieceY(),
                 original.getScore(),
                 original.getLines(),
-                original.getSavedQueue());
+                original.getSavedQueue(),
+                original.getGameId(),
+                original.getStartedAt());
 
         assertTrue(success, "valid snapshot should restore");
         assertTrue(restored.hasActiveGame(), "restored game should remain active");
         assertTrue(!restored.isRunning(), "restored game must wait in paused state");
         assertEquals(original.getScore(), restored.getScore(), "score should survive restore");
         assertEquals(original.getPieceY(), restored.getPieceY(), "piece position should survive restore");
+        assertEquals(original.getGameId(), restored.getGameId(), "game id should survive restore");
+        assertEquals(original.getStartedAt(), restored.getStartedAt(), "start date should survive restore");
+    }
+
+    private static void testHardDrop() {
+        int[][] board = new int[GameEngine.ROWS][GameEngine.COLUMNS];
+        GameEngine engine = new GameEngine();
+        assertTrue(engine.restore(board, GameEngine.I, 0, 3, 0, 0, 0,
+                new int[]{GameEngine.O, GameEngine.T}), "hard-drop setup should restore");
+        engine.setRunning(true);
+        GameEngine.StepResult result = engine.hardDrop();
+
+        assertTrue(result.locked, "hard drop should immediately lock the piece");
+        assertEquals(36, engine.getScore(), "hard drop should award two points per row");
+    }
+
+    private static void testLiveLeaderboardUpsert() {
+        List<Leaderboard.Entry> history = new ArrayList<Leaderboard.Entry>();
+        history.add(new Leaderboard.Entry(11L, 1000, 100L));
+        history.add(new Leaderboard.Entry(12L, 900, 90L));
+
+        List<Leaderboard.Entry> ranked = Leaderboard.upsert(history, 99L, 1006, 200L);
+        assertEquals(3, ranked.size(), "live score should add one leaderboard row");
+        assertEquals(99L, ranked.get(0).gameId, "live 1006 score should become first");
+        assertEquals(1000, ranked.get(1).score, "former first place should move to second");
+
+        ranked = Leaderboard.upsert(ranked, 99L, 1200, 200L);
+        assertEquals(3, ranked.size(), "updating the same game must not add a duplicate row");
+        assertEquals(1200, ranked.get(0).score, "same game should update to its latest score");
+        int matchingGameRows = 0;
+        for (Leaderboard.Entry entry : ranked) {
+            if (entry.gameId == 99L) {
+                matchingGameRows++;
+            }
+        }
+        assertEquals(1, matchingGameRows, "one game must occupy exactly one leaderboard row");
     }
 
     private static void testSingleLineClearAndScoring() {
@@ -105,6 +148,12 @@ public final class GameEngineSelfTest {
     }
 
     private static void assertEquals(int expected, int actual, String message) {
+        if (expected != actual) {
+            throw new AssertionError(message + ": expected=" + expected + ", actual=" + actual);
+        }
+    }
+
+    private static void assertEquals(long expected, long actual, String message) {
         if (expected != actual) {
             throw new AssertionError(message + ": expected=" + expected + ", actual=" + actual);
         }

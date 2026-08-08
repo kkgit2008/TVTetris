@@ -42,6 +42,7 @@ final class TetrisView extends View {
     private static final int BACKGROUND_TOP = Color.rgb(3, 5, 9);
     private static final int BACKGROUND_BOTTOM = Color.rgb(6, 10, 18);
     private static final long SAVE_INTERVAL_MS = 1800L;
+    private static final long DOUBLE_DOWN_WINDOW_MS = 420L;
 
     private final GameEngine engine = new GameEngine();
     private final GameStorage storage;
@@ -57,7 +58,7 @@ final class TetrisView extends View {
     private final ArrayList<Particle> particles = new ArrayList<Particle>();
     private final Matrix shaderMatrix = new Matrix();
 
-    private List<GameStorage.ScoreEntry> leaderboard;
+    private List<Leaderboard.Entry> leaderboard;
     private ToneGenerator toneGenerator;
     private LinearGradient backgroundShader;
     private LinearGradient panelShader;
@@ -68,6 +69,7 @@ final class TetrisView extends View {
     private long nextDropAt;
     private long lastFrameAt;
     private long lastSaveAt;
+    private long lastDownTapAt;
     private long clearFlashUntil;
     private int[] flashingRows = new int[0];
     private boolean restoredGame;
@@ -113,7 +115,7 @@ final class TetrisView extends View {
         setFocusable(true);
         setFocusableInTouchMode(true);
         setKeepScreenOn(true);
-        setContentDescription("电视俄罗斯方块。使用方向键移动和旋转，按确认键开始或暂停。");
+        setContentDescription("电视俄罗斯方块。使用方向键移动和旋转，双击下键直落，按确认键开始或暂停。");
 
         restoredGame = storage.restoreActiveGame(engine);
         leaderboard = storage.getLeaderboard();
@@ -164,29 +166,28 @@ final class TetrisView extends View {
             case KeyEvent.KEYCODE_BUTTON_A:
             case KeyEvent.KEYCODE_BUTTON_START:
                 if (repeatCount == 0) {
+                    lastDownTapAt = 0L;
                     toggleGameState();
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
+                lastDownTapAt = 0L;
                 if (engine.moveHorizontal(-1)) {
                     afterPlayerMove();
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
+                lastDownTapAt = 0L;
                 if (engine.moveHorizontal(1)) {
                     afterPlayerMove();
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                if (engine.isRunning()) {
-                    handleStepResult(engine.stepDown(true));
-                    nextDropAt = SystemClock.uptimeMillis() + engine.getDropIntervalMs();
-                    saveActiveGame();
-                    invalidate();
-                }
+                handleDownKey(repeatCount);
                 return true;
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_BUTTON_B:
+                lastDownTapAt = 0L;
                 if (repeatCount == 0 && engine.rotateClockwise()) {
                     playTone(ToneGenerator.TONE_PROP_BEEP, 35);
                     afterPlayerMove();
@@ -195,6 +196,32 @@ final class TetrisView extends View {
             default:
                 return false;
         }
+    }
+
+    private void handleDownKey(int repeatCount) {
+        if (!engine.isRunning()) {
+            lastDownTapAt = 0L;
+            return;
+        }
+        long now = SystemClock.uptimeMillis();
+        boolean hardDrop = repeatCount == 0
+                && lastDownTapAt > 0L
+                && now - lastDownTapAt <= DOUBLE_DOWN_WINDOW_MS;
+        GameEngine.StepResult result;
+        if (hardDrop) {
+            lastDownTapAt = 0L;
+            playTone(ToneGenerator.TONE_PROP_BEEP, 55);
+            result = engine.hardDrop();
+        } else {
+            if (repeatCount == 0) {
+                lastDownTapAt = now;
+            }
+            result = engine.stepDown(true);
+        }
+        handleStepResult(result);
+        nextDropAt = now + engine.getDropIntervalMs();
+        saveActiveGame();
+        invalidate();
     }
 
     void pauseForBackPress() {
@@ -220,6 +247,7 @@ final class TetrisView extends View {
     }
 
     private void toggleGameState() {
+        lastDownTapAt = 0L;
         if (!engine.hasStarted() || engine.isGameOver()) {
             storage.clearActiveGame();
             particles.clear();
@@ -246,6 +274,7 @@ final class TetrisView extends View {
     }
 
     private void pauseAndSave() {
+        lastDownTapAt = 0L;
         if (engine.isRunning()) {
             engine.setRunning(false);
             playTone(ToneGenerator.TONE_PROP_BEEP2, 55);
@@ -263,6 +292,9 @@ final class TetrisView extends View {
         if (result == null) {
             return;
         }
+        if (result.locked) {
+            lastDownTapAt = 0L;
+        }
         if (result.clearedRows.length > 0) {
             flashingRows = result.clearedRows;
             clearFlashUntil = SystemClock.uptimeMillis() + 360L;
@@ -270,10 +302,12 @@ final class TetrisView extends View {
             playTone(result.clearedRows.length == 4
                     ? ToneGenerator.TONE_PROP_ACK
                     : ToneGenerator.TONE_PROP_BEEP2, 130);
+            storage.updateLeaderboard(engine);
+            leaderboard = storage.getLeaderboard();
         }
         if (result.gameOver) {
             storage.clearActiveGame();
-            storage.recordGameOverScore(engine.getScore());
+            storage.updateLeaderboard(engine);
             leaderboard = storage.getLeaderboard();
             playTone(ToneGenerator.TONE_PROP_NACK, 350);
             announce("游戏结束，得分 " + engine.getScore());
@@ -423,26 +457,35 @@ final class TetrisView extends View {
             float rowTop = listTop + index * rowHeight;
             float baseline = rowTop + rowHeight * 0.68f;
             boolean hasScore = index < leaderboard.size();
+            Leaderboard.Entry entry = hasScore ? leaderboard.get(index) : null;
+            boolean currentGameScore = entry != null
+                    && engine.hasStarted()
+                    && entry.gameId == engine.getGameId();
 
-            if (index < 3 && hasScore) {
-                int highlight = index == 0
+            if ((index < 3 || currentGameScore) && hasScore) {
+                int highlight = currentGameScore
+                        ? Color.argb(30, 168, 85, 247)
+                        : (index == 0
                         ? Color.argb(24, 250, 204, 21)
-                        : Color.argb(14, 91, 220, 255);
+                        : Color.argb(14, 91, 220, 255));
                 paint.setColor(highlight);
                 scratchRect.set(left - 7f * uiScale, rowTop + 1f,
                         right + 7f * uiScale, rowTop + rowHeight - 1f);
                 canvas.drawRoundRect(scratchRect, 6f * uiScale, 6f * uiScale, paint);
             }
 
-            int rankColor = index == 0
+            int rankColor = currentGameScore
+                    ? Color.rgb(192, 157, 255)
+                    : (index == 0
                     ? Color.rgb(250, 204, 21)
-                    : (index < 3 ? Color.rgb(99, 211, 255) : Color.rgb(98, 119, 148));
+                    : (index < 3 ? Color.rgb(99, 211, 255) : Color.rgb(98, 119, 148)));
             setTextStyle(Math.max(11f, 13f * uiScale), rankColor, Paint.Align.LEFT, true);
             canvas.drawText(String.format(Locale.US, "%02d", index + 1), left, baseline, textPaint);
 
             if (hasScore) {
-                GameStorage.ScoreEntry entry = leaderboard.get(index);
-                setTextStyle(Math.max(12f, 15f * uiScale), Color.rgb(224, 233, 247), Paint.Align.LEFT, true);
+                int scoreColor = currentGameScore
+                        ? Color.rgb(210, 184, 255) : Color.rgb(224, 233, 247);
+                setTextStyle(Math.max(12f, 15f * uiScale), scoreColor, Paint.Align.LEFT, true);
                 canvas.drawText(String.format(Locale.US, "%,d", entry.score),
                         left + 42f * uiScale, baseline, textPaint);
                 setTextStyle(Math.max(10f, 12f * uiScale), Color.rgb(112, 133, 160), Paint.Align.RIGHT, false);
@@ -748,7 +791,7 @@ final class TetrisView extends View {
         setTextStyle(13f * uiScale, Color.rgb(141, 160, 185), Paint.Align.LEFT, false);
         canvas.drawText("↑ 旋转", descriptionX, top + 67f * uiScale, textPaint);
         canvas.drawText("← → 移动", descriptionX, top + 92f * uiScale, textPaint);
-        canvas.drawText("↓ 软降", descriptionX, top + 117f * uiScale, textPaint);
+        canvas.drawText("↓ 软降 / 双击直落", descriptionX, top + 117f * uiScale, textPaint);
 
         float okTop = top + 148f * uiScale;
         scratchRect.set(left, okTop, left + 72f * uiScale, okTop + 34f * uiScale);
