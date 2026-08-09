@@ -12,8 +12,9 @@ final class GameSoundManager {
 
     private SoundPool soundPool;
     private int clearOne;
-    private int clearMultiExclaim;
-    private int clearMultiExclaimTwo;
+    private int clearTwo;
+    private int clearThree;
+    private int clearFour;
     private int pieceLand;
 
     @SuppressWarnings("deprecation")
@@ -30,10 +31,11 @@ final class GameSoundManager {
                     }
                 }
             });
-            // User-provided effects: one-line clear, multi-line clears, and piece landing.
-            clearOne = soundPool.load(context, R.raw.clear_one, 1);
-            clearMultiExclaim = soundPool.load(context, R.raw.clear_multi_exclaim, 1);
-            clearMultiExclaimTwo = soundPool.load(context, R.raw.clear_multi_exclaim_2, 1);
+            // User-provided effects: one clip for each clear count and one for landing.
+            clearOne = soundPool.load(context, R.raw.clear_1, 1);
+            clearTwo = soundPool.load(context, R.raw.clear_2, 1);
+            clearThree = soundPool.load(context, R.raw.clear_3, 1);
+            clearFour = soundPool.load(context, R.raw.clear_4, 1);
             pieceLand = soundPool.load(context, R.raw.piece_land, 1);
         } catch (RuntimeException ignored) {
             release();
@@ -50,17 +52,15 @@ final class GameSoundManager {
                 play(clearOne, 0.9f, 1f);
                 break;
             case 2:
-                play(clearMultiExclaim, 0.95f, 1f);
+                play(clearTwo, 0.95f, 1f);
                 break;
             case 3:
-                play(clearMultiExclaimTwo, 1f, 1f);
+                play(clearThree, 1f, 1f);
+                break;
+            case 4:
+                play(clearFour, 1f, 1f);
                 break;
             default:
-                if (rows >= 4) {
-                    // Four lines combine both multi-line clips for a distinct Tetris effect.
-                    play(clearMultiExclaim, 0.55f, 0.92f);
-                    play(clearMultiExclaimTwo, 1f, 1.08f);
-                }
                 break;
         }
     }

@@ -23,7 +23,7 @@
 ./gradlew.bat assembleRelease
 ```
 
-构建产物位于 `app/build/outputs/apk/release/TVTetris-release-1.2.0.apk`，交付包存放于 `release/TVTetris-release-1.2.0.apk`。Release 构建在本地开发阶段使用 Android 默认调试签名，便于直接安装到测试设备；正式发布前请替换为自己的发布签名。
+构建产物位于 `app/build/outputs/apk/release/TVTetris-release-1.2.1.apk`，交付包存放于 `release/TVTetris-release-1.2.1.apk`。Release 构建在本地开发阶段使用 Android 默认调试签名，便于直接安装到测试设备；正式发布前请替换为自己的发布签名。
 
 ## 操作
 
@@ -39,8 +39,8 @@
 
 | 游戏事件 | 原始资源名称 |
 | --- | --- |
-| 消除 1 行 | `消除一行.mp3` |
-| 消除 2 行 | `消除多行-惊叹.mp3` |
-| 消除 3 行 | `消除多行-惊叹2.mp3` |
-| 消除 4 行 | 叠加两种“消除多行”音效 |
-| 方块锁定 | `落方块.mp3` |
+| 消除 1 行 | `clear_1.mp3` |
+| 消除 2 行 | `clear_2.mp3` |
+| 消除 3 行 | `clear_3.mp3` |
+| 消除 4 行 | `clear_4.mp3` |
+| 方块锁定 | `piece_land.mp3` |
