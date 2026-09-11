@@ -17,8 +17,7 @@ env:
   BUILD_JAVA_DIST: 'adopt'
 
   APK_OUTPUT_PATH: ./app/build/outputs/apk/release
-  APK_OUTPUT_FILE: app-release-unsigned.apk
-  # APK_OUTPUT_FILE: app-release.apk
+  APK_OUTPUT_FILE: TVTetris-release-1.2.1.apk
   ARTIFACT_DIR: ./release-artifacts
   INFO_FILE: ./RELEASE_INFO
 
